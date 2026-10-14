@@ -140,3 +140,62 @@ def make_movie_row(details):
         "Country": get_countries(details),
         "Genres": get_genres(details),
     }
+
+# ============================================================
+# EXPORT
+# ============================================================
+
+def make_excel(rows):
+    """Create an Excel workbook in memory."""
+    output = BytesIO()
+    df = pd.DataFrame(rows)
+
+    with pd.ExcelWriter(
+        output,
+        engine="xlsxwriter",
+    ) as writer:
+        df.to_excel(
+            writer,
+            index=False,
+            sheet_name="Movies",
+        )
+
+        workbook = writer.book
+        worksheet = writer.sheets["Movies"]
+
+        header_format = workbook.add_format({
+            "bold": True,
+            "bg_color": "#D9EAF7",
+            "border": 1,
+            "text_wrap": True,
+        })
+
+        cell_format = workbook.add_format({
+            "valign": "top",
+            "text_wrap": True,
+        })
+
+        for col_num, column in enumerate(df.columns):
+            worksheet.write(
+                0, col_num, column, header_format
+            )
+
+            max_length = max(
+                len(str(column)),
+                *(len(str(value)) for value in df[column]),
+            )
+
+            worksheet.set_column(
+                col_num,
+                col_num,
+                min(max(max_length + 2, 12), 45),
+                cell_format,
+            )
+
+        worksheet.freeze_panes(1, 0)
+        worksheet.autofilter(
+            0, 0, len(df), len(df.columns) - 1
+        )
+
+    output.seek(0)
+    return output.getvalue()
