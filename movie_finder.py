@@ -199,3 +199,188 @@ def make_excel(rows):
 
     output.seek(0)
     return output.getvalue()
+
+# ============================================================
+# USER INTERFACE
+# ============================================================
+
+st.title("🎬 Movie Finder")
+st.caption(
+    "Search The Movie Database (TMDB) and explore movie details."
+)
+
+if not TMDB_TOKEN:
+    st.error(
+        "TMDB_TOKEN is missing. Add your TMDB Read Access "
+        "Token to the .env file and restart the app."
+    )
+    st.stop()
+
+
+# Search form
+with st.form("movie_search_form"):
+    st.subheader("Search for a movie")
+
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        movie_title = st.text_input(
+            "Movie title",
+            placeholder="e.g. The Dark Knight",
+        )
+
+    with col2:
+        movie_year = st.number_input(
+            "Release year (optional)",
+            min_value=0,
+            max_value=2100,
+            value=0,
+            help="Leave as 0 if you don't know the year.",
+        )
+
+    submitted = st.form_submit_button(
+        "🔎 Search Movies",
+        type="primary",
+        use_container_width=True,
+    )
+
+
+# Search TMDB when the form is submitted
+if submitted:
+    if not movie_title.strip():
+        st.session_state["movie_candidates"] = []
+        st.warning("Please enter a movie title.")
+    else:
+        try:
+            with st.spinner("Searching TMDB..."):
+                candidates = search_movie(
+                    movie_title,
+                    int(movie_year) if movie_year else None,
+                )
+
+            st.session_state["movie_candidates"] = candidates
+            st.session_state["search_title"] = movie_title.strip()
+
+            # Reset the selected result after a new search
+            st.session_state.pop("selected_movie_id", None)
+            st.session_state.pop("movie_details", None)
+
+            if not candidates:
+                st.info("No matching movies found. Try another title or year.")
+
+        except requests.RequestException as exc:
+            st.error(f"TMDB search failed: {exc}")
+
+
+# Movie selection
+candidates = st.session_state.get("movie_candidates", [])
+
+if candidates:
+    st.subheader("Matching movies")
+
+    def movie_label(movie):
+        title = movie.get("title") or "Untitled"
+        date = movie.get("release_date") or ""
+        year = date[:4] if date else "Year unknown"
+        original = movie.get("original_title", "")
+
+        label = f"{title} ({year})"
+
+        if original and original != title:
+            label += f" — Original title: {original}"
+
+        return label
+
+    selected_movie = st.selectbox(
+        "Choose the movie you want",
+        options=candidates,
+        format_func=movie_label,
+        key="movie_choice",
+    )
+
+    if st.button(
+        "Get Movie Details",
+        type="primary",
+        use_container_width=False,
+    ):
+        try:
+            with st.spinner("Loading movie details and credits..."):
+                details = get_movie_details(selected_movie["id"])
+
+            st.session_state["movie_details"] = details
+            st.session_state["selected_movie_id"] = selected_movie["id"]
+
+        except requests.RequestException as exc:
+            st.error(f"Could not load movie details: {exc}")
+
+
+# Results table
+details = st.session_state.get("movie_details")
+
+if details:
+    st.divider()
+    st.subheader("Movie Details")
+
+    row = make_movie_row(details)
+    df = pd.DataFrame([row])
+
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Director": st.column_config.TextColumn(
+                "Director",
+                help="Director name(s), formatted Last, First",
+            ),
+            "Title": st.column_config.TextColumn("Title"),
+            "Year": st.column_config.TextColumn("Year"),
+            "Country": st.column_config.TextColumn(
+                "Country",
+                help="Production countries",
+            ),
+            "Genres": st.column_config.TextColumn(
+                "Genres",
+                help="All listed movie genres",
+            ),
+        },
+    )
+
+    # Optional overview
+    overview = details.get("overview", "")
+    if overview:
+        with st.expander("Movie overview"):
+            st.write(overview)
+
+    # Export buttons
+    st.subheader("Export results")
+
+    export_col1, export_col2, _ = st.columns([1, 1, 3])
+
+    with export_col1:
+        st.download_button(
+            "⬇️ Download Excel",
+            data=make_excel([row]),
+            file_name="movie_details.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            use_container_width=True,
+        )
+
+    with export_col2:
+        csv_data = pd.DataFrame([row]).to_csv(
+            index=False
+        ).encode("utf-8-sig")
+
+        st.download_button(
+            "⬇️ Download CSV",
+            data=csv_data,
+            file_name="movie_details.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+st.divider()
+st.caption("Movie metadata provided by TMDB.")
