@@ -81,3 +81,62 @@ def get_movie_details(movie_id):
             "append_to_response": "credits",
         },
     )
+
+# ============================================================
+# DATA EXTRACTION
+# ============================================================
+
+def get_director(details):
+    """Extract director names, formatting them Last, First."""
+    crew = details.get("credits", {}).get("crew", [])
+    directors = []
+
+    for person in crew:
+        if person.get("job") != "Director":
+            continue
+
+        name = person.get("name", "").strip()
+        if not name:
+            continue
+
+        parts = name.split()
+
+        if len(parts) >= 2:
+            name = f"{parts[-1]}, {' '.join(parts[:-1])}"
+
+        directors.append(name)
+
+    return ", ".join(directors) or "Unknown"
+
+
+def get_countries(details):
+    countries = details.get("production_countries", [])
+    names = [
+        country.get("name", "")
+        for country in countries
+        if country.get("name")
+    ]
+    return ", ".join(names) or "Unknown"
+
+
+def get_genres(details):
+    genres = details.get("genres", [])
+    names = [
+        genre.get("name", "").strip()
+        for genre in genres
+        if genre.get("name", "").strip()
+    ]
+    return ", ".join(names) or "Unknown"
+
+
+def make_movie_row(details):
+    """Convert TMDB details into the requested table columns."""
+    release_date = details.get("release_date", "")
+
+    return {
+        "Director": get_director(details),
+        "Title": details.get("title") or "Unknown",
+        "Year": release_date[:4] if release_date else "Unknown",
+        "Country": get_countries(details),
+        "Genres": get_genres(details),
+    }
