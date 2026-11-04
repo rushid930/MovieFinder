@@ -1,5 +1,3 @@
-# TO DO: Maybe let you search a director and get a spreadsheet of all their movies in this format
-
 import os
 from io import BytesIO
 import pandas as pd
@@ -81,6 +79,63 @@ def get_movie_details(movie_id):
         },
     )
 
+def search_director(name):
+    """Search TMDB for directors."""
+    data = tmdb_get(
+        "search/person",
+        {
+            "query": name.strip(),
+            "language": LANGUAGE,
+            "include_adult": "false",
+        },
+    )
+
+    # Only return people who have directed at least one movie.
+    directors = []
+
+    for person in data.get("results", []):
+        known_for = person.get("known_for_department")
+
+        if known_for == "Directing":
+            directors.append(person)
+
+    return directors
+
+
+def get_director_movies(director_id):
+    """Retrieve all movie credits for a director."""
+    data = tmdb_get(
+        f"person/{director_id}/movie_credits",
+        {
+            "language": LANGUAGE,
+        },
+    )
+
+    movies = data.get("crew", [])
+
+    # Keep only movies where this person was the director.
+    director_movies = [
+        movie
+        for movie in movies
+        if movie.get("job") == "Director"
+    ]
+
+    # Remove duplicate movies using their TMDB ID.
+    unique_movies = {}
+
+    for movie in director_movies:
+        unique_movies[movie["id"]] = movie
+
+    director_movies = list(unique_movies.values())
+
+    # Sort movies by release date, newest first.
+    director_movies.sort(
+        key=lambda movie: movie.get("release_date", ""),
+        reverse=True,
+    )
+
+    return director_movies
+
 # ============================================================
 # DATA EXTRACTION
 # ============================================================
@@ -136,6 +191,23 @@ def make_movie_row(details):
         "Country": get_countries(details),
         "Genres": get_genres(details),
     }
+
+def make_director_movie_rows(movies, director_name):
+    """Convert director movie credits into table rows."""
+    rows = []
+
+    for movie in movies:
+        release_date = movie.get("release_date", "")
+
+        rows.append({
+            "Director": director_name,
+            "Title": movie.get("title") or "Unknown",
+            "Year": release_date[:4] if release_date else "Unknown",
+            "Country": "See movie details",
+            "Genres": "See movie details",
+        })
+
+    return rows
 
 # ============================================================
 # EXPORT
