@@ -284,6 +284,163 @@ if not TMDB_TOKEN:
     )
     st.stop()
 
+# ============================================================
+# DIRECTOR SEARCH
+# ============================================================
+
+st.divider()
+st.header("🎥 Search by Director")
+
+with st.form("director_search_form"):
+    director_name = st.text_input(
+        "Director name",
+        placeholder="e.g. Christopher Nolan",
+    )
+
+    director_submitted = st.form_submit_button(
+        "🔎 Search Directors",
+        type="primary",
+        use_container_width=True,
+    )
+
+# Search TMDB for directors
+if director_submitted:
+    if not director_name.strip():
+        st.warning("Please enter a director's name.")
+
+    else:
+        try:
+            with st.spinner("Searching for directors..."):
+                directors = search_director(director_name)
+
+            st.session_state["director_candidates"] = directors
+
+            st.session_state.pop(
+                "director_movies",
+                None,
+            )
+
+            if not directors:
+                st.info("No matching directors found.")
+
+        except requests.RequestException as exc:
+            st.error(f"Director search failed: {exc}")
+
+# Director selection
+directors = st.session_state.get(
+    "director_candidates",
+    [],
+)
+
+if directors:
+    st.subheader("Matching Directors")
+
+    def director_label(person):
+        name = person.get("name", "Unknown")
+
+        known_for = person.get("known_for", [])
+
+        known_titles = [
+            item.get("title")
+            for item in known_for
+            if item.get("title")
+        ]
+
+        if known_titles:
+            name += f" — Known for: {', '.join(known_titles[:3])}"
+
+        return name
+
+    selected_director = st.selectbox(
+        "Choose a director",
+        options=directors,
+        format_func=director_label,
+        key="director_choice",
+    )
+
+    if st.button(
+        "Get Director Movies",
+        type="primary",
+    ):
+        try:
+            with st.spinner("Retrieving director filmography..."):
+                movies = get_director_movies(
+                    selected_director["id"]
+                )
+
+            st.session_state["director_movies"] = movies
+
+            st.session_state["selected_director_name"] = (
+                selected_director["name"]
+            )
+
+            if not movies:
+                st.info("No directed movies found.")
+
+        except requests.RequestException as exc:
+            st.error(f"Could not retrieve movies: {exc}")
+
+
+# Director movie results
+director_movies = st.session_state.get(
+    "director_movies",
+)
+
+if director_movies is not None:
+    st.divider()
+
+    director_name = st.session_state.get(
+        "selected_director_name",
+        "Unknown",
+    )
+
+    st.subheader(f"Movies directed by {director_name}")
+
+    director_rows = make_director_movie_rows(
+        director_movies,
+        director_name,
+    )
+
+    director_df = pd.DataFrame(director_rows)
+
+    st.write(f"Total movies found: **{len(director_df)}**")
+
+    st.dataframe(
+        director_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # Export director filmography
+    st.subheader("Export Director Filmography")
+
+    export_col1, export_col2, _ = st.columns([1, 1, 3])
+
+    with export_col1:
+        st.download_button(
+            "⬇️ Download Excel",
+            data=make_excel(director_rows),
+            file_name="director_filmography.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            use_container_width=True,
+        )
+
+    with export_col2:
+        director_csv = director_df.to_csv(
+            index=False,
+        ).encode("utf-8-sig")
+
+        st.download_button(
+            "⬇️ Download CSV",
+            data=director_csv,
+            file_name="director_filmography.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
 # Search form
 with st.form("movie_search_form"):
     st.subheader("Search for a movie")
