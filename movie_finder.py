@@ -1,6 +1,5 @@
 import os
 from io import BytesIO
-
 import pandas as pd
 import requests
 import streamlit as st
@@ -42,7 +41,6 @@ def tmdb_get(endpoint, params=None):
     response.raise_for_status()
     return response.json()
 
-
 def search_movie(title, year=None):
     """Return TMDB search results for a movie."""
     params = {
@@ -71,7 +69,6 @@ def search_movie(title, year=None):
 
     return sorted(results, key=match_score, reverse=True)
 
-
 def get_movie_details(movie_id):
     """Get movie information and director credits."""
     return tmdb_get(
@@ -81,6 +78,63 @@ def get_movie_details(movie_id):
             "append_to_response": "credits",
         },
     )
+
+def search_director(name):
+    """Search TMDB for directors."""
+    data = tmdb_get(
+        "search/person",
+        {
+            "query": name.strip(),
+            "language": LANGUAGE,
+            "include_adult": "false",
+        },
+    )
+
+    # Only return people who have directed at least one movie.
+    directors = []
+
+    for person in data.get("results", []):
+        known_for = person.get("known_for_department")
+
+        if known_for == "Directing":
+            directors.append(person)
+
+    return directors
+
+
+def get_director_movies(director_id):
+    """Retrieve all movie credits for a director."""
+    data = tmdb_get(
+        f"person/{director_id}/movie_credits",
+        {
+            "language": LANGUAGE,
+        },
+    )
+
+    movies = data.get("crew", [])
+
+    # Keep only movies where this person was the director.
+    director_movies = [
+        movie
+        for movie in movies
+        if movie.get("job") == "Director"
+    ]
+
+    # Remove duplicate movies using their TMDB ID.
+    unique_movies = {}
+
+    for movie in director_movies:
+        unique_movies[movie["id"]] = movie
+
+    director_movies = list(unique_movies.values())
+
+    # Sort movies by release date, newest first.
+    director_movies.sort(
+        key=lambda movie: movie.get("release_date", ""),
+        reverse=True,
+    )
+
+    return director_movies
 
 # ============================================================
 # DATA EXTRACTION
@@ -108,7 +162,6 @@ def get_director(details):
 
     return ", ".join(directors) or "Unknown"
 
-
 def get_countries(details):
     countries = details.get("production_countries", [])
     names = [
@@ -118,7 +171,6 @@ def get_countries(details):
     ]
     return ", ".join(names) or "Unknown"
 
-
 def get_genres(details):
     genres = details.get("genres", [])
     names = [
@@ -127,7 +179,6 @@ def get_genres(details):
         if genre.get("name", "").strip()
     ]
     return ", ".join(names) or "Unknown"
-
 
 def make_movie_row(details):
     """Convert TMDB details into the requested table columns."""
@@ -140,6 +191,23 @@ def make_movie_row(details):
         "Country": get_countries(details),
         "Genres": get_genres(details),
     }
+
+def make_director_movie_rows(movies, director_name):
+    """Convert director movie credits into table rows."""
+    rows = []
+
+    for movie in movies:
+        release_date = movie.get("release_date", "")
+
+        rows.append({
+            "Director": director_name,
+            "Title": movie.get("title") or "Unknown",
+            "Year": release_date[:4] if release_date else "Unknown",
+            "Country": "See movie details",
+            "Genres": "See movie details",
+        })
+
+    return rows
 
 # ============================================================
 # EXPORT
@@ -216,6 +284,162 @@ if not TMDB_TOKEN:
     )
     st.stop()
 
+# ============================================================
+# DIRECTOR SEARCH
+# ============================================================
+
+st.divider()
+st.header("🎥 Search by Director")
+
+with st.form("director_search_form"):
+    director_name = st.text_input(
+        "Director name",
+        placeholder="e.g. Christopher Nolan",
+    )
+
+    director_submitted = st.form_submit_button(
+        "🔎 Search Directors",
+        type="primary",
+        use_container_width=True,
+    )
+
+# Search TMDB for directors
+if director_submitted:
+    if not director_name.strip():
+        st.warning("Please enter a director's name.")
+
+    else:
+        try:
+            with st.spinner("Searching for directors..."):
+                directors = search_director(director_name)
+
+            st.session_state["director_candidates"] = directors
+
+            st.session_state.pop(
+                "director_movies",
+                None,
+            )
+
+            if not directors:
+                st.info("No matching directors found.")
+
+        except requests.RequestException as exc:
+            st.error(f"Director search failed: {exc}")
+
+# Director selection
+directors = st.session_state.get(
+    "director_candidates",
+    [],
+)
+
+if directors:
+    st.subheader("Matching Directors")
+
+    def director_label(person):
+        name = person.get("name", "Unknown")
+
+        known_for = person.get("known_for", [])
+
+        known_titles = [
+            item.get("title")
+            for item in known_for
+            if item.get("title")
+        ]
+
+        if known_titles:
+            name += f" — Known for: {', '.join(known_titles[:3])}"
+
+        return name
+
+    selected_director = st.selectbox(
+        "Choose a director",
+        options=directors,
+        format_func=director_label,
+        key="director_choice",
+    )
+
+    if st.button(
+        "Get Director Movies",
+        type="primary",
+    ):
+        try:
+            with st.spinner("Retrieving director filmography..."):
+                movies = get_director_movies(
+                    selected_director["id"]
+                )
+
+            st.session_state["director_movies"] = movies
+
+            st.session_state["selected_director_name"] = (
+                selected_director["name"]
+            )
+
+            if not movies:
+                st.info("No directed movies found.")
+
+        except requests.RequestException as exc:
+            st.error(f"Could not retrieve movies: {exc}")
+
+
+# Director movie results
+director_movies = st.session_state.get(
+    "director_movies",
+)
+
+if director_movies is not None:
+    st.divider()
+
+    director_name = st.session_state.get(
+        "selected_director_name",
+        "Unknown",
+    )
+
+    st.subheader(f"Movies directed by {director_name}")
+
+    director_rows = make_director_movie_rows(
+        director_movies,
+        director_name,
+    )
+
+    director_df = pd.DataFrame(director_rows)
+
+    st.write(f"Total movies found: **{len(director_df)}**")
+
+    st.dataframe(
+        director_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # Export director filmography
+    st.subheader("Export Director Filmography")
+
+    export_col1, export_col2, _ = st.columns([1, 1, 3])
+
+    with export_col1:
+        st.download_button(
+            "⬇️ Download Excel",
+            data=make_excel(director_rows),
+            file_name="director_filmography.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            use_container_width=True,
+        )
+
+    with export_col2:
+        director_csv = director_df.to_csv(
+            index=False,
+        ).encode("utf-8-sig")
+
+        st.download_button(
+            "⬇️ Download CSV",
+            data=director_csv,
+            file_name="director_filmography.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
 # Search form
 with st.form("movie_search_form"):
@@ -244,7 +468,6 @@ with st.form("movie_search_form"):
         use_container_width=True,
     )
 
-
 # Search TMDB when the form is submitted
 if submitted:
     if not movie_title.strip():
@@ -270,7 +493,6 @@ if submitted:
 
         except requests.RequestException as exc:
             st.error(f"TMDB search failed: {exc}")
-
 
 # Movie selection
 candidates = st.session_state.get("movie_candidates", [])
@@ -312,7 +534,6 @@ if candidates:
 
         except requests.RequestException as exc:
             st.error(f"Could not load movie details: {exc}")
-
 
 # Results table
 details = st.session_state.get("movie_details")
