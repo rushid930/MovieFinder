@@ -1,3 +1,6 @@
+# To Do: Need to clean up how the website looks. Functionality it got everything I want but visually it's a mess
+# Can maybe make it a drop down, search movie or search director
+
 import os
 from io import BytesIO
 import pandas as pd
@@ -277,6 +280,15 @@ st.caption(
     "Search The Movie Database (TMDB) and explore movie details."
 )
 
+search_mode = st.selectbox(
+    "Select Search Mode",
+    options=[
+        "Search Movie",
+        "Search Director",
+    ],
+    index=0,
+)
+
 if not TMDB_TOKEN:
     st.error(
         "TMDB_TOKEN is missing. Add your TMDB Read Access "
@@ -288,20 +300,20 @@ if not TMDB_TOKEN:
 # DIRECTOR SEARCH
 # ============================================================
 
-st.divider()
-st.header("🎥 Search by Director")
+elif search_mode == "Search Director":
+    st.subheader("Search for a director")
 
-with st.form("director_search_form"):
-    director_name = st.text_input(
-        "Director name",
-        placeholder="e.g. Christopher Nolan",
-    )
+    with st.form("director_search_form"):
+        director_name = st.text_input(
+            "Director name",
+            placeholder="e.g. Christopher Nolan",
+        )
 
-    director_submitted = st.form_submit_button(
-        "🔎 Search Directors",
-        type="primary",
-        use_container_width=True,
-    )
+        director_submitted = st.form_submit_button(
+            "🔎 Search Directors",
+            type="primary",
+            use_container_width=True,
+        )
 
 # Search TMDB for directors
 if director_submitted:
@@ -441,32 +453,33 @@ if director_movies is not None:
             use_container_width=True,
         )
 
-# Search form
-with st.form("movie_search_form"):
-    st.subheader("Search for a movie")
+if search_mode == "Search Movie":
+    # Search form
+    with st.form("movie_search_form"):
+        st.subheader("Search for a movie")
 
-    col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([3, 1])
 
-    with col1:
-        movie_title = st.text_input(
-            "Movie title",
-            placeholder="e.g. The Dark Knight",
+        with col1:
+            movie_title = st.text_input(
+                "Movie title",
+                placeholder="e.g. The Dark Knight",
+            )
+
+        with col2:
+            movie_year = st.number_input(
+                "Release year (optional)",
+                min_value=0,
+                max_value=2100,
+                value=0,
+                help="Leave as 0 if you don't know the year.",
+            )
+
+        submitted = st.form_submit_button(
+            "🔎 Search Movies",
+            type="primary",
+            use_container_width=True,
         )
-
-    with col2:
-        movie_year = st.number_input(
-            "Release year (optional)",
-            min_value=0,
-            max_value=2100,
-            value=0,
-            help="Leave as 0 if you don't know the year.",
-        )
-
-    submitted = st.form_submit_button(
-        "🔎 Search Movies",
-        type="primary",
-        use_container_width=True,
-    )
 
 # Search TMDB when the form is submitted
 if submitted:
