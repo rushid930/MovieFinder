@@ -284,7 +284,6 @@ if not TMDB_TOKEN:
     )
     st.stop()
 
-
 # Search form
 with st.form("movie_search_form"):
     st.subheader("Search for a movie")
