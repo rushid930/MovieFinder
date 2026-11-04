@@ -1,6 +1,7 @@
+# TO DO: Maybe let you search a director and get a spreadsheet of all their movies in this format
+
 import os
 from io import BytesIO
-
 import pandas as pd
 import requests
 import streamlit as st
@@ -42,7 +43,6 @@ def tmdb_get(endpoint, params=None):
     response.raise_for_status()
     return response.json()
 
-
 def search_movie(title, year=None):
     """Return TMDB search results for a movie."""
     params = {
@@ -70,7 +70,6 @@ def search_movie(title, year=None):
         return (title_match, year_match)
 
     return sorted(results, key=match_score, reverse=True)
-
 
 def get_movie_details(movie_id):
     """Get movie information and director credits."""
@@ -108,7 +107,6 @@ def get_director(details):
 
     return ", ".join(directors) or "Unknown"
 
-
 def get_countries(details):
     countries = details.get("production_countries", [])
     names = [
@@ -118,7 +116,6 @@ def get_countries(details):
     ]
     return ", ".join(names) or "Unknown"
 
-
 def get_genres(details):
     genres = details.get("genres", [])
     names = [
@@ -127,7 +124,6 @@ def get_genres(details):
         if genre.get("name", "").strip()
     ]
     return ", ".join(names) or "Unknown"
-
 
 def make_movie_row(details):
     """Convert TMDB details into the requested table columns."""
@@ -244,7 +240,6 @@ with st.form("movie_search_form"):
         use_container_width=True,
     )
 
-
 # Search TMDB when the form is submitted
 if submitted:
     if not movie_title.strip():
@@ -270,7 +265,6 @@ if submitted:
 
         except requests.RequestException as exc:
             st.error(f"TMDB search failed: {exc}")
-
 
 # Movie selection
 candidates = st.session_state.get("movie_candidates", [])
@@ -312,7 +306,6 @@ if candidates:
 
         except requests.RequestException as exc:
             st.error(f"Could not load movie details: {exc}")
-
 
 # Results table
 details = st.session_state.get("movie_details")
