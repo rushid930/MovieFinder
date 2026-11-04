@@ -1,6 +1,3 @@
-# To Do: Need to clean up how the website looks. Functionality it got everything I want but visually it's a mess
-# Can maybe make it a drop down, search movie or search director
-
 import os
 from io import BytesIO
 import pandas as pd
@@ -296,163 +293,6 @@ if not TMDB_TOKEN:
     )
     st.stop()
 
-# ============================================================
-# DIRECTOR SEARCH
-# ============================================================
-
-elif search_mode == "Search Director":
-    st.subheader("Search for a director")
-
-    with st.form("director_search_form"):
-        director_name = st.text_input(
-            "Director name",
-            placeholder="e.g. Christopher Nolan",
-        )
-
-        director_submitted = st.form_submit_button(
-            "🔎 Search Directors",
-            type="primary",
-            use_container_width=True,
-        )
-
-# Search TMDB for directors
-if director_submitted:
-    if not director_name.strip():
-        st.warning("Please enter a director's name.")
-
-    else:
-        try:
-            with st.spinner("Searching for directors..."):
-                directors = search_director(director_name)
-
-            st.session_state["director_candidates"] = directors
-
-            st.session_state.pop(
-                "director_movies",
-                None,
-            )
-
-            if not directors:
-                st.info("No matching directors found.")
-
-        except requests.RequestException as exc:
-            st.error(f"Director search failed: {exc}")
-
-# Director selection
-directors = st.session_state.get(
-    "director_candidates",
-    [],
-)
-
-if directors:
-    st.subheader("Matching Directors")
-
-    def director_label(person):
-        name = person.get("name", "Unknown")
-
-        known_for = person.get("known_for", [])
-
-        known_titles = [
-            item.get("title")
-            for item in known_for
-            if item.get("title")
-        ]
-
-        if known_titles:
-            name += f" — Known for: {', '.join(known_titles[:3])}"
-
-        return name
-
-    selected_director = st.selectbox(
-        "Choose a director",
-        options=directors,
-        format_func=director_label,
-        key="director_choice",
-    )
-
-    if st.button(
-        "Get Director Movies",
-        type="primary",
-    ):
-        try:
-            with st.spinner("Retrieving director filmography..."):
-                movies = get_director_movies(
-                    selected_director["id"]
-                )
-
-            st.session_state["director_movies"] = movies
-
-            st.session_state["selected_director_name"] = (
-                selected_director["name"]
-            )
-
-            if not movies:
-                st.info("No directed movies found.")
-
-        except requests.RequestException as exc:
-            st.error(f"Could not retrieve movies: {exc}")
-
-
-# Director movie results
-director_movies = st.session_state.get(
-    "director_movies",
-)
-
-if director_movies is not None:
-    st.divider()
-
-    director_name = st.session_state.get(
-        "selected_director_name",
-        "Unknown",
-    )
-
-    st.subheader(f"Movies directed by {director_name}")
-
-    director_rows = make_director_movie_rows(
-        director_movies,
-        director_name,
-    )
-
-    director_df = pd.DataFrame(director_rows)
-
-    st.write(f"Total movies found: **{len(director_df)}**")
-
-    st.dataframe(
-        director_df,
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    # Export director filmography
-    st.subheader("Export Director Filmography")
-
-    export_col1, export_col2, _ = st.columns([1, 1, 3])
-
-    with export_col1:
-        st.download_button(
-            "⬇️ Download Excel",
-            data=make_excel(director_rows),
-            file_name="director_filmography.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            ),
-            use_container_width=True,
-        )
-
-    with export_col2:
-        director_csv = director_df.to_csv(
-            index=False,
-        ).encode("utf-8-sig")
-
-        st.download_button(
-            "⬇️ Download CSV",
-            data=director_csv,
-            file_name="director_filmography.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
 if search_mode == "Search Movie":
     # Search form
     with st.form("movie_search_form"):
@@ -481,140 +321,289 @@ if search_mode == "Search Movie":
             use_container_width=True,
         )
 
-# Search TMDB when the form is submitted
-if submitted:
-    if not movie_title.strip():
-        st.session_state["movie_candidates"] = []
-        st.warning("Please enter a movie title.")
-    else:
-        try:
-            with st.spinner("Searching TMDB..."):
-                candidates = search_movie(
-                    movie_title,
-                    int(movie_year) if movie_year else None,
+    # Search TMDB when the form is submitted
+    if submitted:
+        if not movie_title.strip():
+            st.session_state["movie_candidates"] = []
+            st.warning("Please enter a movie title.")
+        else:
+            try:
+                with st.spinner("Searching TMDB..."):
+                    candidates = search_movie(
+                        movie_title,
+                        int(movie_year) if movie_year else None,
+                    )
+
+                st.session_state["movie_candidates"] = candidates
+                st.session_state["search_title"] = movie_title.strip()
+
+                # Reset the selected result after a new search
+                st.session_state.pop("selected_movie_id", None)
+                st.session_state.pop("movie_details", None)
+
+                if not candidates:
+                    st.info("No matching movies found. Try another title or year.")
+
+            except requests.RequestException as exc:
+                st.error(f"TMDB search failed: {exc}")
+                
+    # Movie selection
+    candidates = st.session_state.get("movie_candidates", [])
+
+    if candidates:
+        st.subheader("Matching movies")
+
+        def movie_label(movie):
+            title = movie.get("title") or "Untitled"
+            date = movie.get("release_date") or ""
+            year = date[:4] if date else "Year unknown"
+            original = movie.get("original_title", "")
+
+            label = f"{title} ({year})"
+
+            if original and original != title:
+                label += f" — Original title: {original}"
+
+            return label
+
+        selected_movie = st.selectbox(
+            "Choose the movie you want",
+            options=candidates,
+            format_func=movie_label,
+            key="movie_choice",
+        )
+
+        if st.button(
+            "Get Movie Details",
+            type="primary",
+            use_container_width=False,
+        ):
+            try:
+                with st.spinner("Loading movie details and credits..."):
+                    details = get_movie_details(selected_movie["id"])
+
+                st.session_state["movie_details"] = details
+                st.session_state["selected_movie_id"] = selected_movie["id"]
+
+            except requests.RequestException as exc:
+                st.error(f"Could not load movie details: {exc}")
+
+    # Results table
+    details = st.session_state.get("movie_details")
+
+    if details:
+        st.divider()
+        st.subheader("Movie Details")
+
+        row = make_movie_row(details)
+        df = pd.DataFrame([row])
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Director": st.column_config.TextColumn(
+                    "Director",
+                    help="Director name(s), formatted Last, First",
+                ),
+                "Title": st.column_config.TextColumn("Title"),
+                "Year": st.column_config.TextColumn("Year"),
+                "Country": st.column_config.TextColumn(
+                    "Country",
+                    help="Production countries",
+                ),
+                "Genres": st.column_config.TextColumn(
+                    "Genres",
+                    help="All listed movie genres",
+                ),
+            },
+        )
+
+        # Optional overview
+        overview = details.get("overview", "")
+        if overview:
+            with st.expander("Movie overview"):
+                st.write(overview)
+
+        # Export buttons
+        st.subheader("Export results")
+
+        export_col1, export_col2, _ = st.columns([1, 1, 3])
+
+        with export_col1:
+            st.download_button(
+                "⬇️ Download Excel",
+                data=make_excel([row]),
+                file_name="movie_details.xlsx",
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                use_container_width=True,
+            )
+
+        with export_col2:
+            csv_data = pd.DataFrame([row]).to_csv(
+                index=False
+            ).encode("utf-8-sig")
+
+            st.download_button(
+                "⬇️ Download CSV",
+                data=csv_data,
+                file_name="movie_details.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+elif search_mode == "Search Director":
+    with st.form("director_search_form"):
+        st.subheader("Search a director's filmography")
+        director_name = st.text_input(
+            "Director name",
+            placeholder="e.g. Christopher Nolan",
+        )
+
+        director_submitted = st.form_submit_button(
+            "🔎 Search Directors",
+            type="primary",
+            use_container_width=True,
+        )
+
+        # Search TMDB for directors
+        if director_submitted:
+            if not director_name.strip():
+                st.warning("Please enter a director's name.")
+
+            else:
+                try:
+                    with st.spinner("Searching for directors..."):
+                        directors = search_director(director_name)
+
+                    st.session_state["director_candidates"] = directors
+
+                    st.session_state.pop(
+                        "director_movies",
+                        None,
+                    )
+
+                    if not directors:
+                        st.info("No matching directors found.")
+
+                except requests.RequestException as exc:
+                    st.error(f"Director search failed: {exc}")
+
+        # Director selection
+        directors = st.session_state.get(
+            "director_candidates",
+            [],
+        )
+
+        if directors:
+            st.subheader("Matching Directors")
+
+            def director_label(person):
+                name = person.get("name", "Unknown")
+
+                known_for = person.get("known_for", [])
+
+                known_titles = [
+                    item.get("title")
+                    for item in known_for
+                    if item.get("title")
+                ]
+
+                if known_titles:
+                    name += f" — Known for: {', '.join(known_titles[:3])}"
+
+                return name
+
+            selected_director = st.selectbox(
+                "Choose a director",
+                options=directors,
+                format_func=director_label,
+                key="director_choice",
+            )
+
+            if st.form_submit_button(
+                "Get Director Movies",
+                type="primary",
+            ):
+                try:
+                    with st.spinner("Retrieving director filmography..."):
+                        movies = get_director_movies(
+                            selected_director["id"]
+                        )
+
+                    st.session_state["director_movies"] = movies
+
+                    st.session_state["selected_director_name"] = (
+                        selected_director["name"]
+                    )
+
+                    if not movies:
+                        st.info("No directed movies found.")
+
+                except requests.RequestException as exc:
+                    st.error(f"Could not retrieve movies: {exc}")
+
+        # Director movie results
+        director_movies = st.session_state.get(
+            "director_movies",
+        )
+
+        if director_movies is not None:
+            director_name = st.session_state.get(
+                "selected_director_name",
+                "Unknown",
+            )
+
+            st.subheader(f"Movies directed by {director_name}")
+
+            director_rows = make_director_movie_rows(
+                director_movies,
+                director_name,
+            )
+
+            director_df = pd.DataFrame(director_rows)
+
+            st.write(f"Total movies found: **{len(director_df)}**")
+
+            st.dataframe(
+                director_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # Export director filmography
+            st.subheader("Export Director Filmography")
+
+            export_col1, export_col2, _ = st.columns([1, 1, 3])
+
+            with export_col1:
+                st.download_button(
+                    "⬇️ Download Excel",
+                    data=make_excel(director_rows),
+                    file_name="director_filmography.xlsx",
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    use_container_width=True,
                 )
 
-            st.session_state["movie_candidates"] = candidates
-            st.session_state["search_title"] = movie_title.strip()
+            with export_col2:
+                director_csv = director_df.to_csv(
+                    index=False,
+                ).encode("utf-8-sig")
 
-            # Reset the selected result after a new search
-            st.session_state.pop("selected_movie_id", None)
-            st.session_state.pop("movie_details", None)
-
-            if not candidates:
-                st.info("No matching movies found. Try another title or year.")
-
-        except requests.RequestException as exc:
-            st.error(f"TMDB search failed: {exc}")
-
-# Movie selection
-candidates = st.session_state.get("movie_candidates", [])
-
-if candidates:
-    st.subheader("Matching movies")
-
-    def movie_label(movie):
-        title = movie.get("title") or "Untitled"
-        date = movie.get("release_date") or ""
-        year = date[:4] if date else "Year unknown"
-        original = movie.get("original_title", "")
-
-        label = f"{title} ({year})"
-
-        if original and original != title:
-            label += f" — Original title: {original}"
-
-        return label
-
-    selected_movie = st.selectbox(
-        "Choose the movie you want",
-        options=candidates,
-        format_func=movie_label,
-        key="movie_choice",
-    )
-
-    if st.button(
-        "Get Movie Details",
-        type="primary",
-        use_container_width=False,
-    ):
-        try:
-            with st.spinner("Loading movie details and credits..."):
-                details = get_movie_details(selected_movie["id"])
-
-            st.session_state["movie_details"] = details
-            st.session_state["selected_movie_id"] = selected_movie["id"]
-
-        except requests.RequestException as exc:
-            st.error(f"Could not load movie details: {exc}")
-
-# Results table
-details = st.session_state.get("movie_details")
-
-if details:
-    st.divider()
-    st.subheader("Movie Details")
-
-    row = make_movie_row(details)
-    df = pd.DataFrame([row])
-
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Director": st.column_config.TextColumn(
-                "Director",
-                help="Director name(s), formatted Last, First",
-            ),
-            "Title": st.column_config.TextColumn("Title"),
-            "Year": st.column_config.TextColumn("Year"),
-            "Country": st.column_config.TextColumn(
-                "Country",
-                help="Production countries",
-            ),
-            "Genres": st.column_config.TextColumn(
-                "Genres",
-                help="All listed movie genres",
-            ),
-        },
-    )
-
-    # Optional overview
-    overview = details.get("overview", "")
-    if overview:
-        with st.expander("Movie overview"):
-            st.write(overview)
-
-    # Export buttons
-    st.subheader("Export results")
-
-    export_col1, export_col2, _ = st.columns([1, 1, 3])
-
-    with export_col1:
-        st.download_button(
-            "⬇️ Download Excel",
-            data=make_excel([row]),
-            file_name="movie_details.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            ),
-            use_container_width=True,
-        )
-
-    with export_col2:
-        csv_data = pd.DataFrame([row]).to_csv(
-            index=False
-        ).encode("utf-8-sig")
-
-        st.download_button(
-            "⬇️ Download CSV",
-            data=csv_data,
-            file_name="movie_details.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
+                st.download_button(
+                    "⬇️ Download CSV",
+                    data=director_csv,
+                    file_name="director_filmography.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
 st.divider()
 st.caption("Movie metadata provided by TMDB.")
