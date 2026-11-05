@@ -575,35 +575,36 @@ elif search_mode == "Search Director":
                 hide_index=True,
             )
 
-            # Export director filmography
-            st.subheader("Export Director Filmography")
+    if director_movies is not None:
+        # Export director filmography
+        st.subheader("Export Director Filmography")
 
-            export_col1, export_col2, _ = st.columns([1, 1, 3])
+        export_col1, export_col2, _ = st.columns([1, 1, 3])
 
-            with export_col1:
-                st.download_button(
-                    "⬇️ Download Excel",
-                    data=make_excel(director_rows),
-                    file_name="director_filmography.xlsx",
-                    mime=(
-                        "application/vnd.openxmlformats-officedocument."
-                        "spreadsheetml.sheet"
-                    ),
-                    use_container_width=True,
-                )
+        with export_col1:
+            st.download_button(
+                "⬇️ Download Excel",
+                data=make_excel(director_rows),
+                file_name="director_filmography.xlsx",
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                use_container_width=True,
+            )
 
-            with export_col2:
-                director_csv = director_df.to_csv(
-                    index=False,
-                ).encode("utf-8-sig")
+        with export_col2:
+            director_csv = director_df.to_csv(
+                index=False,
+            ).encode("utf-8-sig")
 
-                st.download_button(
-                    "⬇️ Download CSV",
-                    data=director_csv,
-                    file_name="director_filmography.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
+            st.download_button(
+                "⬇️ Download CSV",
+                data=director_csv,
+                file_name="director_filmography.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
 
 st.divider()
 st.caption("Movie metadata provided by TMDB.")
